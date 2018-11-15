@@ -8,7 +8,7 @@ library(picante)
 library(DECIPHER)
 library(vegan)
 library(rworldmap)
-
+library(ggtree)
 #Part C - Investigation of the Community Phylogenetic Structure of Cigaritis in Different Coutries    
 
 #Research Introduction: Cigaritis is a genus of butterflies in the family Lycaenidae. Its species are found in Africa, Indonesia, Malaysia and adjacent regions of Asia. However, the community phylogenetic structure of Cigaritis is still unclear. This research aims to investigate the community phylogenetic structure of Cigaritis by measuring levels of phylogenetic diversity (PD) in selected countries. The phylogenetic diversity measure was designed to be a potential indicator for  the relative feature diversity of different subsets of species from a phylogeny. In this research, an R package called 'picante' will be used to calculate the PD of each country as the minimum total length of all the phylogenetic branches required to connect all those species within a subset on the tree. 
@@ -23,7 +23,7 @@ class(Cigaritis.BOLD$nucleotides)
 
 #Step 2:  Align Sequence from Data 
 
-Cigaritis.BOLD.alignment <- DNAStringSet(muscle::muscle(Cigaritis.BOLD.nuccore.for.alignment, gapopening=-3000,gapextension=-400,maxiters = 8, diags1 = TRUE))
+Cigaritis.BOLD.alignment <- DNAStringSet(muscle::muscle(Cigaritis.BOLD.nuccore.for.alignment, gapopen=-3000, gapextend=-400, maxiters = 8, diags1 = TRUE))   #typo in argument: gapopen not gapopenning, gapextend not gapextension; also not sure for diags1 argument because may reduce accuracy; Even though the max iteration set as 8, but the muscle alignment stop at iteration 3.
 names(Cigaritis.BOLD.alignment) <- Cigaritis.BOLD$Combined_Name
 
 #Step 3: Cluster Aligned Sequence into OTUs 
@@ -41,47 +41,54 @@ Cigaritis.OTUs <- IdClusters(Cigaritis.distanceMatrix,
 
 #Step 4: Select one sequence per OTU (for building the phylogeny)
 Cigaritis.OTUs.List<-Cigaritis.OTUs[[1]]
-Cigaritis.BOLD.clean <- data.frame(Cigaritis.BOLD$processid,
-                                   Cigaritis.BOLD$species_name,
-                                   Cigaritis.BOLD$markercode,
-                                   Cigaritis.BOLD$nucleotides,
-                                   Cigaritis.OTUs.List$cluster,
-                                   Cigaritis.BOLD$country)
+Cigaritis.BOLD.clean <- tibble (processid = Cigaritis.BOLD$processid,     # use tibble to contruct this data frame with simple column name
+                               species_name = Cigaritis.BOLD$species_name,   #a simple column name can reduce the error in downstream analysis
+                               markercode = Cigaritis.BOLD$markercode,
+                               nucleotides = Cigaritis.BOLD$nucleotides,
+                               cluster = Cigaritis.OTUs.List$cluster,
+                               country = Cigaritis.BOLD$country)
 
 Cigaritis.one.per.cluster<-Cigaritis.BOLD.clean %>% 
-  group_by(Cigaritis.BOLD.clean$Cigaritis.OTUs.List.cluster) %>% 
+  group_by(Cigaritis.BOLD.clean$cluster) %>% 
   sample_n(1)
 
 #Step 5: Align the Representative Sequences
-Cigaritis.one.per.cluster$Cigaritis.BOLD.nucleotides <- DNAStringSet(Cigaritis.one.per.cluster$Cigaritis.BOLD.nucleotides)
-Cigaritis.OTUs.Alignment <- DNAStringSet(muscle::muscle(Cigaritis.one.per.cluster$Cigaritis.BOLD.nucleotides, gapopening=-3000,gapextension=-400,maxiters = 8, diags1 = TRUE))
-names(Cigaritis.OTUs.Alignment) <- Cigaritis.one.per.cluster$Cigaritis.BOLD.species_name
+Cigaritis.one.per.cluster$nucleotides <- DNAStringSet(Cigaritis.one.per.cluster$nucleotides)
+Cigaritis.OTUs.Alignment <- DNAStringSet(muscle::muscle(Cigaritis.one.per.cluster$nucleotides, gapopen=-3000,gapextend=-400,maxiters = 8, diags1 = TRUE)) #same mistake
+names(Cigaritis.OTUs.Alignment) <- Cigaritis.one.per.cluster$species_name
 
 #Step 6: Build the Phylogeny 
 Cigaritis.OTU.DNAStr <- as(Cigaritis.OTUs.Alignment, "DNAStringSet")
 writeXStringSet(Cigaritis.OTU.DNAStr, file="Cigaritis_OTU_alignment.fasta")
 Cigaritis.Phylo <- read.phyDat("Cigaritis_OTU_alignment.fasta",format="fasta",type="DNA")
 Cigaritis.OTU.DM <- dist.ml(Cigaritis.Phylo)
-Cigaritis_Tree <- (ape::nj(Cigaritis.OTU.DM)) 
-Cigaritis_Tree <- nnls.tree(Cigaritis.OTU.DM, Cigaritis_Tree, rooted = TRUE)
+Cigaritis_Tree_0 <- (ape::nj(Cigaritis.OTU.DM))    #only use distance based method to build phylogeny tree is potential inaccurate
+#maxmium likelyhood may be a better choice 
+Cigaritis_Tree_0$tip.label[15] <- c("Cigaritis larseni_1")
+names(Cigaritis.Phylo) <- Cigaritis_Tree_0$tip.label
+fit.ini <- pml(Cigaritis_Tree_0, Cigaritis.Phylo, k=4)  #create the inital tree for optimization
+fit <- optim.pml(fit.ini, optNni=TRUE, optBf=TRUE,
+                 optQ=TRUE, optGamma=TRUE)      #select what we want to optimize: tree topology, base frequencies, the rates of all possible subtitutions and use a gamma distribution to model variation in the substitution rates across sites 
 
+Cigaritis_Tree <- fit$tree
+Cigaritis_Tree$tip.label[15] <- c("Cigaritis larseni") #restore the original name
+
+Cigaritis_Tree <- nnls.tree(Cigaritis.OTU.DM, Cigaritis_Tree, rooted = TRUE)
 #Step 7: Annotate species with corresponding country names 
 
-head(Cigaritis_Tree$tip.label)
-Tip.Label=Cigaritis_Tree$tip.label
-Tree_Table=data.frame(Tip.Label)
-Tree_Table$Country=0
-Tree_Table$Country <- Cigaritis.one.per.cluster$Cigaritis.BOLD.country
+head(Cigaritis_Tree$tip.label)  #tibble is a subpackage in tidyverse which is aiming to create data frame in a simple way 
+Tree_Table <- tibble(           # build the data.frame for country information in tidyverse style
+  Tip.lable = Cigaritis_Tree$tip.label
+  , Country = Cigaritis.one.per.cluster$country 
+)
+
 
 # I am going to create a function to color the species with respect to their corresponding countries.
-cls <- function(Tree_Table){
-  ss <- sort(unique(Tree_Table$Country))
-  colors <- setNames(palette()[1:length(ss)],ss)
-  return(colors)
-}
-colors = cls(Tree_Table)
-plot(Cigaritis_Tree,tip.color=colors, cex=2.5,font=10,main="Phylogenetic Tree - Cigaritis",edge.width=1.5) 
-legend("bottomright",legend=sort(unique(Tree_Table$Country)),fill=unique(colors),cex=1.3)
+ggtree(Cigaritis_Tree) %<+% Tree_Table + #%<+% is a operator in ggtree which can add extra information for tree
+  geom_tiplab(aes(color=Country)) +   #add labelled names and assign each name with colour corresponded to their countries
+  theme(legend.position = "right") +  
+  ggplot2::xlim(0,0.06)    #shrink the size of tree
+#ggtree is a powerful package based on ggplot. It provides freedom and simpilicity in tree visulization. That chunk of codes can be replaced by 5 lines of codes.   
 
 #Please find the annotated phylogeny tree in the pdf file. 
 
@@ -103,7 +110,7 @@ pd.result <- pd.result[,c(3,1,2)]
 
 sPDF <- joinCountryData2Map(pd.result,joinCode = "NAME",nameJoinColumn = "region")
 Bubble<-mapBubbles(sPDF,nameZSize = "PD",nameZColour = "region",colourPalette = "rainbow",oceanCol = "white",landCol = "grey",main = "The Distribution of Phylogenetic Diversity by Country")
-
+#
 #Please find the the bubble map in the pdf file. 
 
 #Result Interpretation 
