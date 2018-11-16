@@ -87,7 +87,8 @@ Tree_Table <- tibble(           # build the data.frame for country information i
 ggtree(Cigaritis_Tree) %<+% Tree_Table + #%<+% is a operator in ggtree which can add extra information for tree
   geom_tiplab(aes(color=Country)) +   #add labelled names and assign each name with colour corresponded to their countries
   theme(legend.position = "right") +  
-  ggplot2::xlim(0,0.06)    #shrink the size of tree
+  ggplot2::xlim(0,0.06) +   #shrink the size of tree
+  ggtitle("Phylogenetic Tree - Cigaritis")
 #ggtree is a powerful package based on ggplot. It provides freedom and simpilicity in tree visulization. That chunk of codes can be replaced by 5 lines of codes.   
 
 #Please find the annotated phylogeny tree in the pdf file. 
