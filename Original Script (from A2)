@@ -41,8 +41,11 @@ Cigaritis.OTUs <- IdClusters(Cigaritis.distanceMatrix,
 
 #Step 4: Select one sequence per OTU (for building the phylogeny)
 Cigaritis.OTUs.List<-Cigaritis.OTUs[[1]]
-Cigaritis.BOLD.clean <- tibble (processid = Cigaritis.BOLD$processid,     # use tibble to contruct this data frame with simple column name
-                               species_name = Cigaritis.BOLD$species_name,   #a simple column name can reduce the error in downstream analysis
+
+#Comment: use tibble to contruct this data frame with simple column name
+#a simple column name can reduce the error in downstream analysis
+Cigaritis.BOLD.clean <- tibble (processid = Cigaritis.BOLD$processid,     
+                               species_name = Cigaritis.BOLD$species_name,  
                                markercode = Cigaritis.BOLD$markercode,
                                nucleotides = Cigaritis.BOLD$nucleotides,
                                cluster = Cigaritis.OTUs.List$cluster,
@@ -62,8 +65,12 @@ Cigaritis.OTU.DNAStr <- as(Cigaritis.OTUs.Alignment, "DNAStringSet")
 writeXStringSet(Cigaritis.OTU.DNAStr, file="Cigaritis_OTU_alignment.fasta")
 Cigaritis.Phylo <- read.phyDat("Cigaritis_OTU_alignment.fasta",format="fasta",type="DNA")
 Cigaritis.OTU.DM <- dist.ml(Cigaritis.Phylo)
-Cigaritis_Tree_0 <- (ape::nj(Cigaritis.OTU.DM))    #only use distance based method to build phylogeny tree is potential inaccurate
+Cigaritis_Tree_0 <- (ape::nj(Cigaritis.OTU.DM))    
+
+#Comments:
+#only use distance based method to build phylogeny tree is potential inaccurate
 #maxmium likelyhood may be a better choice 
+
 Cigaritis_Tree_0$tip.label[15] <- c("Cigaritis larseni_1")
 names(Cigaritis.Phylo) <- Cigaritis_Tree_0$tip.label
 fit.ini <- pml(Cigaritis_Tree_0, Cigaritis.Phylo, k=4)  #create the inital tree for optimization
@@ -76,8 +83,9 @@ Cigaritis_Tree$tip.label[15] <- c("Cigaritis larseni") #restore the original nam
 Cigaritis_Tree <- nnls.tree(Cigaritis.OTU.DM, Cigaritis_Tree, rooted = TRUE)
 #Step 7: Annotate species with corresponding country names 
 
-head(Cigaritis_Tree$tip.label)  #tibble is a subpackage in tidyverse which is aiming to create data frame in a simple way 
-Tree_Table <- tibble(           # build the data.frame for country information in tidyverse style
+#Comments: tibble is a subpackage in tidyverse which is aiming to create data frame in a simple way 
+head(Cigaritis_Tree$tip.label) 
+Tree_Table <- tibble(           
   Tip.lable = Cigaritis_Tree$tip.label
   , Country = Cigaritis.one.per.cluster$country 
 )
@@ -87,9 +95,8 @@ Tree_Table <- tibble(           # build the data.frame for country information i
 ggtree(Cigaritis_Tree) %<+% Tree_Table + #%<+% is a operator in ggtree which can add extra information for tree
   geom_tiplab(aes(color=Country)) +   #add labelled names and assign each name with colour corresponded to their countries
   theme(legend.position = "right") +  
-  ggplot2::xlim(0,0.06) +   #shrink the size of tree
-  ggtitle("Phylogenetic Tree - Cigaritis")
-#ggtree is a powerful package based on ggplot. It provides freedom and simpilicity in tree visulization. That chunk of codes can be replaced by 5 lines of codes.   
+  ggplot2::xlim(0,0.06)    #shrink the size of tree
+#Comments: ggtree is a powerful package based on ggplot. It provides freedom and simpilicity in tree visulization. That chunk of codes can be replaced by 5 lines of codes.   
 
 #Please find the annotated phylogeny tree in the pdf file. 
 
@@ -111,7 +118,7 @@ pd.result <- pd.result[,c(3,1,2)]
 
 sPDF <- joinCountryData2Map(pd.result,joinCode = "NAME",nameJoinColumn = "region")
 Bubble<-mapBubbles(sPDF,nameZSize = "PD",nameZColour = "region",colourPalette = "rainbow",oceanCol = "white",landCol = "grey",main = "The Distribution of Phylogenetic Diversity by Country")
-#
+
 #Please find the the bubble map in the pdf file. 
 
 #Result Interpretation 
